@@ -1,0 +1,88 @@
+#include <avr/io.h>
+
+#define TRIG PD1  // Assuming TRIG is on PORTD Pin 1
+#define ECHO PD2  // Assuming ECHO is on PORTD Pin 2
+
+void delayLoop(unsigned long cycles) {
+    while (cycles--) {
+        __asm__ __volatile__("nop");
+    }
+}
+
+void serialWrite(char c) {
+    while (!(UCSR0A & (1 << UDRE0))) {} // Wait until buffer is empty
+    UDR0 = c;
+}
+
+void serialPrint(const char *str) {
+    while (*str) {
+        serialWrite(*str++);
+    }
+}
+
+void serialPrintInt(int num) {
+    char buffer[10];
+    int i = 0;
+    if (num == 0) {
+        serialWrite('0');
+        return;
+    }
+    if (num < 0) {
+        serialWrite('-');
+        num = -num;
+    }
+    while (num > 0) {
+        buffer[i++] = (num % 10) + '0';
+        num /= 10;
+    }
+    while (i--) {
+        serialWrite(buffer[i]);
+    }
+}
+
+int main() {
+    long duration;
+    int distance;
+    double volume;
+    double waterLevel;
+
+    DDRD |= (1 << TRIG);  // Set TRIG as output
+    DDRD &= ~(1 << ECHO); // Set ECHO as input
+    
+    UCSR0B = (1 << TXEN0); // Enable UART transmitter
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // 8-bit data
+    UBRR0L = 103; // Baud rate 9600 for 16MHz clock
+
+    while (1) {
+        PORTD &= ~(1 << TRIG);
+        delayLoop(200); // Simulated 2-microsecond delay
+        PORTD |= (1 << TRIG);
+        delayLoop(1000); // Simulated 10-microsecond delay
+        PORTD &= ~(1 << TRIG);
+
+        long start = 0;
+        while (!(PIND & (1 << ECHO))) {
+            start++;
+        }
+        long stop = start;
+        while (PIND & (1 << ECHO)) {
+            stop++;
+        }
+
+        duration = stop - start;
+        distance = duration * 0.034 / 2;
+        waterLevel = 6 - distance;
+        volume = 36.576 * waterLevel;
+
+        serialPrint("Distance: ");
+        serialPrintInt(distance);
+        serialPrint(" cm\n");
+
+        serialPrint("Volume: ");
+        serialPrintInt((int)volume);
+        serialPrint(" L\n");
+
+        delayLoop(1000000);  // Simulated 100 ms delay
+    }
+    return 0;
+}
